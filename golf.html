@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <title>골프 머니 게임 계산기</title>
+  <style>
+    body { font-family: sans-serif; padding: 16px; }
+    h1 { font-size: 20px; margin-bottom: 8px; }
+    table { border-collapse: collapse; width: 100%; max-width: 1000px; font-size: 12px; }
+    th, td { border: 1px solid #ccc; padding: 4px; text-align: center; }
+    th { background: #f0f0f0; }
+    input[type="number"] { width: 50px; }
+    .totals { margin-top: 12px; max-width: 600px; }
+    .totals td, .totals th { border: 1px solid #ccc; padding: 4px; text-align: center; }
+    .controls { margin-bottom: 10px; }
+    .note { font-size: 11px; color: #555; margin-top: 8px; line-height: 1.4; }
+  </style>
+</head>
+<body>
+  <h1>골프 머니 게임 계산기 (4인 / 타당 2·4 / 버디·이글·스킨 포함)</h1>
+
+  <div class="controls">
+    스킨 값 ($):
+    <input type="number" id="skinValue" value="2" step="0.5" />
+    <button onclick="calcAll()">계산하기</button>
+  </div>
+
+  <table id="scoreTable">
+    <thead>
+      <tr>
+        <th>Hole</th>
+        <th>Par</th>
+        <th>A</th>
+        <th>B</th>
+        <th>C</th>
+        <th>D</th>
+        <th>Rate</th>
+        <th>A Net</th>
+        <th>B Net</th>
+        <th>C Net</th>
+        <th>D Net</th>
+        <th>이 홀 이동금액</th>
+        <th>Pot Before</th>
+        <th>Pot Used</th>
+        <th>Pot Remain</th>
+        <th>Skin Winner</th>
+      </tr>
+    </thead>
+    <tbody>
+      <script>
+        for (let h = 1; h <= 18; h++) {
+          document.write('<tr>');
+          document.write('<td>' + h + '</td>');
+          document.write('<td><input type="number" id="par_' + h + '" value="4"></td>');
+          document.write('<td><input type="number" id="A_' + h + '"></td>');
+          document.write('<td><input type="number" id="B_' + h + '"></td>');
+          document.write('<td><input type="number" id="C_' + h + '"></td>');
+          document.write('<td><input type="number" id="D_' + h + '"></td>');
+          document.write('<td id="rate_' + h + '"></td>');
+          document.write('<td id="netA_' + h + '"></td>');
+          document.write('<td id="netB_' + h + '"></td>');
+          document.write('<td id="netC_' + h + '"></td>');
+          document.write('<td id="netD_' + h + '"></td>');
+          document.write('<td id="moved_' + h + '"></td>');
+          document.write('<td id="potBefore_' + h + '"></td>');
+          document.write('<td id="potUsed_' + h + '"></td>');
+          document.write('<td id="potRemain_' + h + '"></td>');
+          document.write('<td id="skinWinner_' + h + '"></td>');
+          document.write('</tr>');
+        }
+      </script>
+    </tbody>
+  </table>
+
+  <table class="totals">
+    <tr><th></th><th>A</th><th>B</th><th>C</th><th>D</th></tr>
+    <tr>
+      <th>합계</th>
+      <td id="totalA"></td>
+      <td id="totalB"></td>
+      <td id="totalC"></td>
+      <td id="totalD"></td>
+    </tr>
+  </table>
+
+  <script>
+    function calcAll() {
+      const skinValue = parseFloat(document.getElementById('skinValue').value) || 2;
+      let totalA=0,totalB=0,totalC=0,totalD=0;
+      let prevScores=null, prevPar=null, potRemainPrev=0;
+
+      for (let h=1; h<=18; h++) {
+        const par = +document.getElementById('par_'+h).value;
+        const scores = ['A','B','C','D'].map(p => +document.getElementById(p+'_'+h).value);
+        if (scores.some(isNaN)) break;
+
+        let rate=2;
+        if (h>1 && prevScores){
+          const hasBirdie = prevScores.some(s=>s<=prevPar-1);
+          const hasTriple = prevScores.some(s=>s>=prevPar+3);
+          const allSame = prevScores.every(s=>s===prevScores[0]);
+          rate = (hasBirdie||hasTriple||allSame)?4:2;
+        }
+        document.getElementById('rate_'+h).textContent = rate;
+
+        let net=[0,0,0,0];
+        for (let i=0;i<4;i++){
+          for (let j=i+1;j<4;j++){
+            const diff=(scores[j]-scores[i])*rate;
+            net[i]+=diff; net[j]-=diff;
+          }
+        }
+
+        const birdies = scores.filter(s=>s===par-1).length;
+        if (birdies){
+          for(let i=0;i<4;i++){
+            if(scores[i]===par-1) net[i]+=(4-birdies)*5;
+            else net[i]-=birdies*5;
+          }
+        }
+
+        const eagles = scores.filter(s=>s<=par-2).length;
+        if (eagles){
+          for(let i=0;i<4;i++){
+            if(scores[i]<=par-2) net[i]+=(4-eagles)*20;
+            else net[i]-=eagles*20;
+          }
+        }
+
+        const potBefore=potRemainPrev+1;
+        let potUsed=0, potRemain=potBefore, skinWinner=-1;
+        const min=Math.min(...scores);
+        const minIdx=scores.map((s,i)=>s===min?i:-1).filter(i=>i>=0);
+        if(minIdx.length===1 && min<=par){
+          skinWinner=minIdx[0];
+          potUsed=Math.min(potBefore,3);
+          potRemain=potBefore-potUsed;
+          for(let i=0;i<4;i++){
+            if(i===skinWinner) net[i]+=3*potUsed*skinValue;
+            else net[i]-=potUsed*skinValue;
+          }
+        }
+        potRemainPrev=potRemain;
+
+        document.getElementById('netA_'+h).textContent=net[0];
+        document.getElementById('netB_'+h).textContent=net[1];
+        document.getElementById('netC_'+h).textContent=net[2];
+        document.getElementById('netD_'+h).textContent=net[3];
+        document.getElementById('moved_'+h).textContent=net.filter(v=>v>0).reduce((a,b)=>a+b,0);
+        document.getElementById('potBefore_'+h).textContent=potBefore;
+        document.getElementById('potUsed_'+h).textContent=potUsed;
+        document.getElementById('potRemain_'+h).textContent=potRemain;
+        document.getElementById('skinWinner_'+h).textContent = skinWinner>=0?['A','B','C','D'][skinWinner]:'';
+
+        totalA+=net[0]; totalB+=net[1]; totalC+=net[2]; totalD+=net[3];
+        prevScores=scores; prevPar=par;
+      }
+
+      document.getElementById('totalA').textContent=totalA;
+      document.getElementById('totalB').textContent=totalB;
+      document.getElementById('totalC').textContent=totalC;
+      document.getElementById('totalD').textContent=totalD;
+    }
+  </script>
+</body>
+</html>
